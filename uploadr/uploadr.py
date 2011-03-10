@@ -1,14 +1,23 @@
 #!/usr/bin/env python
 
 import sys, time, os, urllib2, shelve, string, xmltramp, mimetools, mimetypes, hashlib, webbrowser
+import tweepy
+import tinyurl
+
 #
 #   uploadr.py
 #
 #   Upload images placed within a directory to your Flickr account.
+#   Also posts a tweet about the newly uploaded image
 #
 #   Requires:
 #       xmltramp http://www.aaronsw.com/2002/xmltramp/
+#	tweepy https://github.com/joshthecoder/tweepy
+#	tinyurl http://pypi.python.org/pypi/TinyUrl/
+#
 #       flickr account http://flickr.com
+#	twitter API keys https://dev.twitter.com/apps/new
+#	twitter account http://www.twitter.com/
 #
 #   Inspired by:
 #        http://micampe.it/things/flickruploadr
@@ -22,6 +31,10 @@ import sys, time, os, urllib2, shelve, string, xmltramp, mimetools, mimetypes, h
 #
 #   cron entry (runs at the top of every hour )
 #   0  *  *   *   * /full/path/to/uploadr.py > /dev/null 2>&1
+#
+#   Here's a nice write up of how to use this script 
+#   http://lifehacker.com/#!262311/automatically-upload-a-folders-photos-to-flickr
+#   Including how to setup it to run in the background
 #
 #   September 2005
 #   Cameron Mallory   cmallory/berserk.org
@@ -37,7 +50,7 @@ import sys, time, os, urllib2, shelve, string, xmltramp, mimetools, mimetypes, h
 #
 # Location to scan for new images
 #   
-IMAGE_DIR = "images/"  
+IMAGE_DIR = "c:/temp/test/"  
 #
 #   Flickr settings
 #
@@ -55,6 +68,28 @@ SLEEP_TIME = 1 * 60
 #   File we keep the history of uploaded images in.
 #
 HISTORY_FILE = "uploadr.history"
+
+# this is used when we tweet about the image
+FLICKR_IMAGE_URL = "http://www.flickr.com/photos/YOUR_PUBLIC_URL/"
+
+# To figure out to get proper Twitter API tokens, read about it in
+# Tweepy's documentation. http://joshthecoder.github.com/tweepy/docs/auth_tutorial.html#auth-tutorial
+#
+# To get these you have to register a new application in twitter 
+# https://dev.twitter.com/apps/new
+#
+# TWITTER SETTINGS
+TWITTER_consumer_token = ""
+TWITTER_consumer_secret = ""
+
+# User settings, there could probably be a better way to do this, but
+# I just quickly hacked this script together to fit my needs
+# There's a python script that can read these out for you, you'll need to
+# put the API to that script as well, or the optimal thing would be
+# integrate these two scripts
+TWITTER_token_key = ""
+TWITTER_token_secret = ""
+
 
 ##
 ##  You shouldn't need to modify anything below here
@@ -80,6 +115,19 @@ class APIConstants:
        pass
        
 api = APIConstants()
+
+
+
+def GetTweetPrefix():
+    return "New development shot:"
+
+def Tweet( message ):
+    print message
+    auth = tweepy.OAuthHandler(TWITTER_consumer_token, TWITTER_consumer_secret)
+    auth.set_access_token(TWITTER_token_key, TWITTER_token_secret)
+    t_api = tweepy.API(auth)
+    t_api.update_status(message)
+
 
 class Uploadr:
     token = None
@@ -303,15 +351,22 @@ class Uploadr:
                 url = self.build_request(api.upload, d, (photo,))    
                 xml = urllib2.urlopen( url ).read()
                 res = xmltramp.parse(xml)
+                
                 if ( self.isGood( res ) ):
                     print "successful."
                     self.logUpload( res.photoid, image )
+                    self.tweetAboutUpload( res.photoid, image )
                 else :
                     print "problem.."
                     self.reportError( res )
             except:
                 print str(sys.exc_info())
 
+    def tweetAboutUpload( self, photoID, imageName ):
+        url_to_post = FLICKR_IMAGE_URL + str( photoID ) + "/"
+        short_url = tinyurl.create_one(url_to_post)
+        tweet_to_post = GetTweetPrefix() + " " + short_url
+        Tweet( tweet_to_post )
 
     def logUpload( self, photoID, imageName ):
         photoID = str( photoID )
